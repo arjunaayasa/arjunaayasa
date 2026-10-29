@@ -1,0 +1,47 @@
+name: Update stats
+
+on:
+  schedule:
+    - cron: "0 17 * * *" # 00:00 WIB
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-stats
+  cancel-in-progress: false
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Test
+        run: node --test 'scripts/*.test.mjs'
+
+      # If this step fails (expired token, API outage), nothing is committed and
+      # the README keeps showing the last good images.
+      - name: Build stats
+        run: node scripts/build-stats.mjs
+        env:
+          STATS_TOKEN: ${{ secrets.STATS_TOKEN }}
+          AUTHOR_EMAILS: ${{ secrets.AUTHOR_EMAILS }}
+
+      - name: Commit
+        run: |
+          git add assets/stats-*.svg
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: update stats"
+          git push
